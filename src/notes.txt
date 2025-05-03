@@ -1,0 +1,43 @@
+1. Via npm scripts:
+    bash# Start with OpenAI
+    npm run start:openai
+
+    # Start with Claude
+    npm run start:claude
+
+    # Development mode with OpenAI
+    npm run dev:openai
+
+2. Via environment variables:
+    bash# Unix/Linux/Mac
+    export LLM_PROVIDER=anthropic
+    npm start
+
+    # Windows CMD
+    set LLM_PROVIDER=anthropic
+    npm start
+
+    # Windows PowerShell
+    $env:LLM_PROVIDER="anthropic"
+    npm start
+
+3. Via API endpoints:
+    bash# Get current provider
+    curl http://localhost:3000/config/llm-provider
+
+    # Switch to Claude
+    curl -X POST http://localhost:3000/config/llm-provider \
+    -H "Content-Type: application/json" \
+    -d '{"provider": "anthropic"}'
+
+    # Switch to OpenAI
+    curl -X POST http://localhost:3000/config/llm-provider \
+    -H "Content-Type: application/json" \
+    -d '{"provider": "openai"}'
+    
+4. Via CLI tool:
+    bash# Set provider
+    node scripts/cli.js set-provider anthropic
+
+    # Get current provider
+    node scripts/cli.js get-provider
