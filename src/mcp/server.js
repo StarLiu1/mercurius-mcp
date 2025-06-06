@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { parseNlToCqlTool } from "./tools/parseNlToCql.js";
+import { processCqlQueryTool } from "./tools/processCqlQuery.js";
 import { fetchVsacTool } from "./tools/fetchVsac.js";
 import { mapToOmopTool } from "./tools/mapToOmop.js";
 import { generateSqlTool } from "./tools/generateSql.js";
@@ -15,6 +16,7 @@ export function createOMOPServer() {
 
   // Register tools
   parseNlToCqlTool(server);
+  processCqlQueryTool(server);
   fetchVsacTool(server);
   mapToOmopTool(server);
   generateSqlTool(server);
