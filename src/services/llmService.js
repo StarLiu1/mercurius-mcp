@@ -1,6 +1,6 @@
-const OpenAI = require('openai');
-const Anthropic = require('@anthropic-ai/sdk');
-const config = require('../config');
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import config from '../config/index.js';
 
 class LLMService {
   constructor() {
@@ -9,6 +9,15 @@ class LLMService {
     if (this.provider === 'openai') {
       this.client = new OpenAI({
         apiKey: config.llm.openai.apiKey
+      });
+    } else if (this.provider === 'azure-openai') {
+      this.client = new OpenAI({
+        apiKey: config.llm.azure?.apiKey,
+        baseURL: config.llm.azure?.endpoint,
+        defaultQuery: { 'api-version': config.llm.azure?.apiVersion || '2024-02-15-preview' },
+        defaultHeaders: {
+          'api-key': config.llm.azure?.apiKey,
+        }
       });
     } else if (this.provider === 'anthropic') {
       this.client = new Anthropic({
@@ -20,7 +29,7 @@ class LLMService {
   }
 
   async createCompletion(messages, options = {}) {
-    if (this.provider === 'openai') {
+    if (this.provider === 'openai' || this.provider === 'azure-openai') {
       return this.createOpenAICompletion(messages, options);
     } else if (this.provider === 'anthropic') {
       return this.createAnthropicCompletion(messages, options);
@@ -29,33 +38,34 @@ class LLMService {
 
   async createOpenAICompletion(messages, options) {
     try {
+      const model = options.model || 
+        (this.provider === 'azure-openai' ? config.llm.azure.model : config.llm.openai.model);
+      
       const response = await this.client.chat.completions.create({
-        model: options.model || config.llm.openai.model,
+        model: model,
         messages: messages,
-        // temperature: options.temperature || 0.7,
         ...options
       });
       
       return {
         content: response.choices[0].message.content.trim(),
         usage: response.usage,
-        provider: 'openai'
+        provider: this.provider
       };
     } catch (error) {
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI API error: ${error.message}`);
+      console.error(`${this.provider} API error:`, error);
+      throw new Error(`${this.provider} API error: ${error.message}`);
     }
   }
 
   async createAnthropicCompletion(messages, options) {
     try {
-      // Convert OpenAI message format to Claude format
       const systemMessage = messages.find(msg => msg.role === 'system');
       const userMessages = messages.filter(msg => msg.role !== 'system');
       
       const response = await this.client.messages.create({
         model: options.model || config.llm.anthropic.model,
-        max_completion_tokens: options.maxTokens || 4096,
+        max_tokens: options.maxTokens || 4096,
         temperature: options.temperature || 0.7,
         system: systemMessage ? systemMessage.content : undefined,
         messages: userMessages.map(msg => ({
@@ -81,4 +91,4 @@ class LLMService {
   }
 }
 
-module.exports = new LLMService();
+export default new LLMService();

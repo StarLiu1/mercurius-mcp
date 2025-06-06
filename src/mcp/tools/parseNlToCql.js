@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { parseToCql } from "../../tools/parseNlToCql/parser.js";
-import { extractValueSetIdentifiersFromCQL } from "../../tools/parseNlToCql/extractors.js";
+import { parseToCql } from "./parseNlToCql/parser.js";
+import { extractValueSetIdentifiersFromCQL } from "./parseNlToCql/extractors.js";
 
 export function parseNlToCqlTool(server) {
   server.tool(

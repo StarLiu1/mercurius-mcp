@@ -11,6 +11,12 @@ export default {
       apiKey: process.env.OPENAI_API_KEY,
       model: process.env.OPENAI_MODEL || 'gpt-4-turbo'
     },
+    azure: {
+      apiKey: process.env.AZURE_OPENAI_API_KEY,
+      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
+      model: process.env.AZURE_OPENAI_MODEL || 'gpt-4',
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview'
+    },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: process.env.ANTHROPIC_MODEL || 'claude-3-opus-20240229'

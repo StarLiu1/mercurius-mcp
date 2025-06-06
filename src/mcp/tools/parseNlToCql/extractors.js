@@ -1,4 +1,4 @@
-import llmService from '../../services/llmService.js';
+import llmService from '../../../services/llmService.js';
 
 export async function extractValueSetIdentifiersFromCQL(cqlQuery) {
   try {
