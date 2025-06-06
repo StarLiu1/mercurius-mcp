@@ -1,0 +1,20 @@
+{
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.25.55"
+  },
+  "scripts": {
+    "mcp:stdio": "node src/mcp/transports/stdio.js",
+    "mcp:http": "node src/mcp/transports/http.js",
+    "mcp:auto": "node src/mcp/transports/index.js",
+    "start": "npm run mcp:auto",
+    "start:stdio": "MCP_TRANSPORT=stdio npm run mcp:auto",
+    "start:http": "MCP_TRANSPORT=http npm run mcp:auto",
+    "dev:stdio": "nodemon src/mcp/transports/stdio.js",
+    "dev:http": "nodemon src/mcp/transports/http.js"
+  },
+  "bin": {
+    "omop-mcp": "./src/mcp/transports/stdio.js"
+  },
+  "type": "module"
+}
