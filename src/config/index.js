@@ -3,7 +3,9 @@ dotenv.config();
 
 export default {
   server: {
-    port: process.env.PORT || 3000
+    port: process.env.PORT || 3000,
+    requestTimeout: parseInt(process.env.MCP_REQUEST_TIMEOUT) || 30000, // 30 seconds
+    toolTimeout: parseInt(process.env.MCP_TOOL_TIMEOUT) || 60000, // 60 seconds for complex tools
   },
   llm: {
     provider: process.env.LLM_PROVIDER || 'openai',

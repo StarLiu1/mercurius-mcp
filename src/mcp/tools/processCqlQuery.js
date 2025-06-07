@@ -148,8 +148,9 @@ async function queryVsacStructured(valueSetIdentifier, username = "", password =
 
 async function dynamicMapVsacToOmop(codeSystems) {
   const systemPrompt = `You are an expert in clinical terminologies and the OMOP Common Data Model.
-  Map each VSAC codeSystemName to the appropriate OMOP vocabulary_id.
-  
+  Given the following list of VSAC codeSystemNames and the list of available vocabularies (with vocabulary_id and vocabulary_name) from OMOP, 
+  determine the most appropriate OMOP vocabulary_id for each VSAC codeSystemName. 
+
   Common mappings:
   - "ICD10CM" -> "ICD10CM"
   - "SNOMEDCT" -> "SNOMED"
