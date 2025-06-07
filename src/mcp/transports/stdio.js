@@ -4,7 +4,8 @@ import { createOMOPServer } from "../server.js";
 
 async function main() {
   try {
-    console.error("OMOP MCP Server starting via stdio..."); // Use stderr so it doesn't interfere with MCP protocol
+    // Use stderr for all debug messages to avoid corrupting stdout
+    console.error("OMOP MCP Server starting via stdio...");
     
     const server = createOMOPServer();
     const transport = new StdioServerTransport();

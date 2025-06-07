@@ -11,11 +11,12 @@ export function processCqlQueryTool(server) {
     },
     async ({ cqlQuery, vsacUsername, vsacPassword }) => {
       try {
-        console.log("Starting full CQL processing pipeline...");
+        // Use stderr for debug logs to avoid corrupting MCP stdout
+        console.error("Starting full CQL processing pipeline...");
         
         // Step 1: Extract ValueSet OIDs from the input CQL
         const oidList = await extractValueSetIdentifiersFromCQL(cqlQuery);
-        console.log("Extracted ValueSet OIDs:", oidList);
+        console.error("Extracted ValueSet OIDs:", oidList);
         
         if (oidList.length === 0) {
           return {
@@ -35,37 +36,37 @@ export function processCqlQueryTool(server) {
         const omopConceptMapping = {};
         
         for (const oid of oidList) {
-          console.log(`Processing ValueSet OID: ${oid}`);
+          console.error(`Processing ValueSet OID: ${oid}`);
           
           // Step 2: Query VSAC to obtain structured concept data
           const vsacData = await queryVsacStructured(oid, vsacUsername, vsacPassword);
-          console.log(`VSAC data for ${oid}:`, vsacData.length, "concepts");
+          console.error(`VSAC data for ${oid}:`, vsacData.length, "concepts");
           
           if (vsacData.length === 0) {
-            console.log(`No VSAC data found for OID: ${oid}`);
+            console.error(`No VSAC data found for OID: ${oid}`);
             continue;
           }
           
           // Step 3: Map VSAC codeSystemNames to OMOP vocabulary IDs
           const allCodeSystems = [...new Set(vsacData.map(entry => entry.codeSystemName))];
           const dynamicMapping = await dynamicMapVsacToOmop(allCodeSystems);
-          console.log(`Dynamic mapping for ${oid}:`, dynamicMapping);
+          console.error(`Dynamic mapping for ${oid}:`, dynamicMapping);
           
           // Step 4: Query OMOP CONCEPT table for matches
           const matchedData = await checkVsacConceptsInOmop(vsacData, dynamicMapping);
           omopConceptMapping[oid] = matchedData;
-          console.log(`OMOP mapping for ${oid}:`, matchedData);
+          console.error(`OMOP mapping for ${oid}:`, matchedData);
         }
         
         // Step 5: Summarize the mapping
         const summarizedMapping = await summarizeOmopMapping(omopConceptMapping);
-        console.log("Summarized mapping:", summarizedMapping);
+        console.error("Summarized mapping:", summarizedMapping);
         
         // Step 6: Translate CQL to SQL
         const finalSqlQuery = await translateCqlToSql(cqlQuery, summarizedMapping);
-        console.log("Generated SQL:", finalSqlQuery);
+        console.error("Generated SQL:", finalSqlQuery);
         
-        // Step 7: Troubleshoot (simplified version - we'll skip the group chat for now)
+        // Step 7: Troubleshoot (simplified version)
         const troubleshootingReport = await troubleshootSqlQuery(finalSqlQuery, summarizedMapping);
         
         // Step 8: Return the SQL query with metadata
@@ -106,7 +107,7 @@ export function processCqlQueryTool(server) {
   );
 }
 
-// Helper functions (these will need to be implemented)
+// Helper functions (using stderr for debug logs)
 
 async function extractValueSetIdentifiersFromCQL(cqlQuery) {
   const messages = [
@@ -134,7 +135,7 @@ async function extractValueSetIdentifiersFromCQL(cqlQuery) {
 async function queryVsacStructured(valueSetIdentifier, username = "", password = "") {
   // TODO: Implement actual VSAC API call
   // For now, return mock data
-  console.log(`Mock VSAC query for: ${valueSetIdentifier}`);
+  console.error(`Mock VSAC query for: ${valueSetIdentifier}`);
   return [
     {
       code: "I10",
