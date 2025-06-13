@@ -2,10 +2,10 @@
 
 /**
  * Extract ValueSet OID identifiers from CQL query using valueset declaration pattern
- * Pattern: (valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')
- * Extracts group 3: the OID part
+ * Pattern: (valueset\s")(.+)(":\s')(urn:oid:)((\d+\.)*\d+)(')
+ * Extracts group 5: the OID part and group 2: the name
  * @param {string} cqlQuery - The CQL query string
- * @returns {Promise<string[]>} Array of ValueSet OIDs
+ * @returns {Promise<Object>} Object with oids array and valuesets array with name/oid pairs
  */
 export async function extractValueSetIdentifiersFromCQL(cqlQuery) {
   try {
@@ -14,38 +14,51 @@ export async function extractValueSetIdentifiersFromCQL(cqlQuery) {
     // Input validation
     if (!cqlQuery || typeof cqlQuery !== 'string') {
       console.error("Invalid CQL query input:", typeof cqlQuery);
-      return [];
+      return { oids: [], valuesets: [] };
     }
     
     const oids = new Set(); // Use Set to avoid duplicates
+    const valuesets = []; // Array to store name/oid pairs
     
-    // Pattern: (valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')
-    // Group 1: valueset "name": '
-    // Group 2: urn:oid:
-    // Group 3: the OID we want to extract
-    // Group 4: closing quote
-    const valuesetPattern = /(valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
+    // Updated Pattern: (valueset\s")(.+)(":\s')(urn:oid:)((\d+\.)*\d+)(')
+    // Group 1: valueset "
+    // Group 2: name (what we want to extract)
+    // Group 3: ": '
+    // Group 4: urn:oid:
+    // Group 5: the OID we want to extract
+    // Group 6: closing quote
+    const valuesetPattern = /(valueset\s")(.+)(":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
     let match;
     
     while ((match = valuesetPattern.exec(cqlQuery)) !== null) {
-      const oid = match[3]; // Extract group 3 - the OID part
-      if (oid && typeof oid === 'string') {
+      const name = match[2]; // Extract group 2 - the name
+      const oid = match[5]; // Extract group 5 - the OID part
+      
+      if (oid && typeof oid === 'string' && name && typeof name === 'string') {
         oids.add(oid);
-        console.error(`Found valueset declaration: ${oid}`);
+        valuesets.push({
+          name: name.trim(),
+          oid: oid.trim()
+        });
+        console.error(`Found valueset declaration: "${name}" -> ${oid}`);
       }
     }
     
     // Convert Set to Array and log results
     const oidArray = Array.from(oids);
     console.error(`Total unique OIDs extracted: ${oidArray.length}`);
+    console.error(`Total valuesets with names: ${valuesets.length}`);
     console.error(`OIDs found: ${JSON.stringify(oidArray)}`);
     
-    // Ensure we always return an array
-    return Array.isArray(oidArray) ? oidArray : [];
+    // Return both arrays
+    return {
+      oids: Array.isArray(oidArray) ? oidArray : [],
+      valuesets: Array.isArray(valuesets) ? valuesets : []
+    };
     
   } catch (error) {
     console.error("Error extracting ValueSet OIDs:", error);
-    return [];
+    return { oids: [], valuesets: [] };
   }
 }
 
@@ -87,13 +100,17 @@ export async function extractAndValidateValueSets(cqlQuery) {
       validOids: [],
       invalidOids: [],
       allExtracted: [],
+      valuesets: [],
       hasValueSets: false,
       validCount: 0,
       invalidCount: 0
     };
   }
   
-  const extractedOids = await extractValueSetIdentifiersFromCQL(cqlQuery);
+  const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
+  const extractedOids = extractionResult.oids;
+  const valuesets = extractionResult.valuesets;
+  
   const validOids = validateExtractedOids(extractedOids);
   const invalidOids = extractedOids.filter(oid => !validOids.includes(oid));
   
@@ -102,6 +119,7 @@ export async function extractAndValidateValueSets(cqlQuery) {
     validOids: validOids,
     invalidOids: invalidOids,
     allExtracted: extractedOids,
+    valuesets: valuesets,
     hasValueSets: extractedOids.length > 0,
     validCount: validOids.length,
     invalidCount: invalidOids.length

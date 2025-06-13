@@ -4,7 +4,7 @@ import { parseNlToCqlTool } from "./tools/parseNlToCql.js";
 // import { processCqlQueryTool } from "./tools/processCqlQuery.js";
 import { fetchVsacTool } from "./tools/fetchVsac.js";
 // import { debugVsacTool } from "./tools/debugVsac.js";
-// import { exploreVsacTool } from "./tools/exploreVsac.js";
+import { exploreVsacTool } from "./tools/exploreVsac.js";
 import { mapToOmopTool } from "./tools/mapToOmop.js";
 import { generateSqlTool } from "./tools/generateSql.js";
 
@@ -22,7 +22,7 @@ export function createOMOPServer() {
   // processCqlQueryTool(server);
   fetchVsacTool(server);
   // debugVsacTool(server);      // Authentication debugging
-  // exploreVsacTool(server);    // ValueSet exploration and search
+  exploreVsacTool(server);    // ValueSet exploration and search
   mapToOmopTool(server);
   generateSqlTool(server);
 

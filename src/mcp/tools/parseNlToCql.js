@@ -72,13 +72,16 @@ export function parseNlToCqlTool(server) {
       try {
         console.error("Testing regex extraction patterns...");
         
-        const extractedOids = await extractValueSetIdentifiersFromCQL(cqlQuery);
+        const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
+        const extractedOids = extractionResult.oids;
+        const valuesets = extractionResult.valuesets;
+        
         const validOids = validateExtractedOids(extractedOids);
         const invalidOids = extractedOids.filter(oid => !validOids.includes(oid));
         
         const result = {
           input: cqlQuery,
-          extractedOids: extractedOids,
+          extractedOids: valuesets, // JSON array with name/oid pairs
           validOids: validOids,
           invalidOids: invalidOids,
           summary: {
@@ -86,6 +89,7 @@ export function parseNlToCqlTool(server) {
             validOids: validOids.length,
             invalidOids: invalidOids.length
           },
+          // Copy-pastable arrays
           copyPastableArrays: {
             extractedOids: JSON.stringify(extractedOids),
             validOids: JSON.stringify(validOids),
@@ -97,24 +101,27 @@ export function parseNlToCqlTool(server) {
         if (showDetails) {
           result.detailedRegexTests = {};
           
-          // Test valueset declaration pattern only
-          const valuesetPattern = /(valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
+          // Test valueset declaration pattern with updated regex
+          const valuesetPattern = /(valueset\s")(.+)(":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
           const valuesetMatches = [];
           let match;
           while ((match = valuesetPattern.exec(cqlQuery)) !== null) {
             valuesetMatches.push({
               fullMatch: match[0],
-              group1: match[1], // valueset "name": '
-              group2: match[2], // urn:oid:
-              group3: match[3], // OID (what we extract)
-              group4: match[4], // '
+              group1: match[1], // valueset "
+              group2: match[2], // name
+              group3: match[3], // ": '
+              group4: match[4], // urn:oid:
+              group5: match[5], // OID (what we extract)
+              group6: match[6], // '
               index: match.index,
-              extractedOid: match[3]
+              extractedName: match[2],
+              extractedOid: match[5]
             });
           }
           result.detailedRegexTests.valuesetPattern = {
-            pattern: "(valueset\\s\".+\":\\s')(urn:oid:)((\\d+\\.)*\\d+)(')",
-            description: "Matches valueset declarations with single quotes and extracts group 3 (OID)",
+            pattern: "(valueset\\s\")(.+)(\":\\s')(urn:oid:)((\\d+\\.)*\\d+)(')",
+            description: "Matches valueset declarations and extracts both name (group 2) and OID (group 5)",
             matches: valuesetMatches
           };
         }
@@ -140,7 +147,6 @@ export function parseNlToCqlTool(server) {
       }
     }
   );
-
   // // Tool to demonstrate different CQL patterns that should be recognized
   // server.tool(
   //   "demo-cql-patterns",
