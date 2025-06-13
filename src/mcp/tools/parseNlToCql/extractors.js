@@ -1,26 +1,143 @@
-import llmService from '../../../services/llmService.js';
+// src/mcp/tools/parseNlToCql/extractors.js
 
+/**
+ * Extract ValueSet OID identifiers from CQL query using valueset declaration pattern
+ * Pattern: (valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')
+ * Extracts group 3: the OID part
+ * @param {string} cqlQuery - The CQL query string
+ * @returns {Promise<string[]>} Array of ValueSet OIDs
+ */
 export async function extractValueSetIdentifiersFromCQL(cqlQuery) {
   try {
-    const messages = [
-      { 
-        role: "system", 
-        content: "Extract all ValueSet OID identifiers from the CQL query and return them as a JSON array of strings. Only return the JSON array, no other text."
-      },
-      { role: "user", content: `CQL Query:\n${cqlQuery}\n` }
-    ];
+    console.error("Extracting ValueSet OIDs using valueset declaration pattern...");
     
-    const response = await llmService.createCompletion(messages);
-    
-    try {
-      const oids = JSON.parse(response.content);
-      return Array.isArray(oids) ? oids : [];
-    } catch (e) {
-      console.error("Error parsing OID extraction:", e);
+    // Input validation
+    if (!cqlQuery || typeof cqlQuery !== 'string') {
+      console.error("Invalid CQL query input:", typeof cqlQuery);
       return [];
     }
+    
+    const oids = new Set(); // Use Set to avoid duplicates
+    
+    // Pattern: (valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')
+    // Group 1: valueset "name": '
+    // Group 2: urn:oid:
+    // Group 3: the OID we want to extract
+    // Group 4: closing quote
+    const valuesetPattern = /(valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
+    let match;
+    
+    while ((match = valuesetPattern.exec(cqlQuery)) !== null) {
+      const oid = match[3]; // Extract group 3 - the OID part
+      if (oid && typeof oid === 'string') {
+        oids.add(oid);
+        console.error(`Found valueset declaration: ${oid}`);
+      }
+    }
+    
+    // Convert Set to Array and log results
+    const oidArray = Array.from(oids);
+    console.error(`Total unique OIDs extracted: ${oidArray.length}`);
+    console.error(`OIDs found: ${JSON.stringify(oidArray)}`);
+    
+    // Ensure we always return an array
+    return Array.isArray(oidArray) ? oidArray : [];
+    
   } catch (error) {
-    console.error("Error calling LLM API:", error);
+    console.error("Error extracting ValueSet OIDs:", error);
     return [];
   }
+}
+
+/**
+ * Validate that extracted OIDs follow proper format
+ * @param {string[]} oids - Array of OID strings
+ * @returns {string[]} Array of valid OIDs
+ */
+export function validateExtractedOids(oids) {
+  // Handle undefined, null, or non-array inputs
+  if (!oids || !Array.isArray(oids)) {
+    console.error("validateExtractedOids: Invalid input, expected array but got:", typeof oids);
+    return [];
+  }
+  
+  const validOidPattern = /^\d+(?:\.\d+)+$/;
+  
+  return oids.filter(oid => {
+    // Ensure each oid is a string before testing
+    if (typeof oid !== 'string') {
+      console.error("validateExtractedOids: Non-string OID found:", oid);
+      return false;
+    }
+    return validOidPattern.test(oid);
+  });
+}
+
+/**
+ * Extract and validate ValueSet OIDs with detailed reporting
+ * @param {string} cqlQuery - The CQL query string
+ * @returns {Promise<Object>} Extraction results with validation
+ */
+export async function extractAndValidateValueSets(cqlQuery) {
+  // Add safety check for cqlQuery
+  if (!cqlQuery || typeof cqlQuery !== 'string') {
+    console.error("extractAndValidateValueSets: Invalid CQL query input:", typeof cqlQuery);
+    return {
+      totalFound: 0,
+      validOids: [],
+      invalidOids: [],
+      allExtracted: [],
+      hasValueSets: false,
+      validCount: 0,
+      invalidCount: 0
+    };
+  }
+  
+  const extractedOids = await extractValueSetIdentifiersFromCQL(cqlQuery);
+  const validOids = validateExtractedOids(extractedOids);
+  const invalidOids = extractedOids.filter(oid => !validOids.includes(oid));
+  
+  return {
+    totalFound: extractedOids.length,
+    validOids: validOids,
+    invalidOids: invalidOids,
+    allExtracted: extractedOids,
+    hasValueSets: extractedOids.length > 0,
+    validCount: validOids.length,
+    invalidCount: invalidOids.length
+  };
+}
+
+/**
+ * Test function to demonstrate regex pattern on sample CQL
+ * @param {string} sampleCql - Sample CQL for testing
+ * @returns {Object} Test results
+ */
+export function testOidExtraction(sampleCql) {
+  console.error("Testing OID extraction on sample CQL...");
+  console.error("Sample CQL:", sampleCql);
+  
+  const results = {
+    input: sampleCql,
+    patternUsed: "(valueset\\s\".+\":\\s')(urn:oid:)((\\d+\\.)*\\d+)(')",
+    patternDescription: "Matches valueset declarations with single quotes and extracts group 3 (OID)",
+    matches: []
+  };
+  
+  // Test the valueset declaration pattern
+  const valuesetPattern = /(valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
+  let match;
+  while ((match = valuesetPattern.exec(sampleCql)) !== null) {
+    results.matches.push({
+      fullMatch: match[0],
+      group1: match[1], // valueset "name": '
+      group2: match[2], // urn:oid:
+      group3: match[3], // OID (what we extract)
+      group4: match[4], // '
+      index: match.index,
+      extractedOid: match[3]
+    });
+  }
+  
+  return results;
 }

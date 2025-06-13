@@ -3,78 +3,95 @@ import { z } from "zod";
 import vsacService from "../../services/vsacService.js";
 
 export function fetchVsacTool(server) {
-  server.tool(
-    "fetch-vsac",
-    { 
-      valueSetId: z.string(),
-      version: z.string().optional(),
-      username: z.string().optional(),
-      password: z.string().optional()
-    },
-    async ({ valueSetId, version, username, password }) => {
-      try {
-        // Check for required credentials
-        if (!username || !password) {
-          return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                error: "VSAC username and password are required",
-                valueSetId,
-                status: "authentication_required"
-              })
-            }],
-            isError: true
-          };
-        }
+  // server.tool(
+  //   "fetch-vsac",
+  //   { 
+  //     valueSetId: z.string(),
+  //     version: z.string().optional(),
+  //     username: z.string().optional(),
+  //     password: z.string().optional()
+  //   },
+  //   async ({ valueSetId, version, username, password }) => {
+  //     try {
+  //       // Check for required credentials
+  //       if (!username || !password) {
+  //         return {
+  //           content: [{
+  //             type: "text",
+  //             text: JSON.stringify({
+  //               error: "VSAC username and password are required",
+  //               valueSetId,
+  //               status: "authentication_required",
+  //               guidance: [
+  //                 "Provide your UMLS username and password",
+  //                 "Ensure your UMLS account has VSAC access enabled",
+  //                 "Test credentials using the debug-vsac-auth tool first"
+  //               ]
+  //             }, null, 2)
+  //           }],
+  //           isError: true
+  //         };
+  //       }
 
-        console.error(`Fetching VSAC value set: ${valueSetId}`);
+  //       console.error(`Fetching VSAC value set: ${valueSetId}`);
         
-        const concepts = await vsacService.retrieveValueSet(
-          valueSetId, 
-          version, 
-          username, 
-          password
-        );
+  //       const concepts = await vsacService.retrieveValueSet(
+  //         valueSetId, 
+  //         version, 
+  //         username, 
+  //         password
+  //       );
         
-        const result = {
-          valueSetId,
-          version: version || "Latest",
-          conceptCount: concepts.length,
-          concepts: concepts,
-          codeSystemsFound: [...new Set(concepts.map(c => c.codeSystemName))],
-          status: "success",
-          retrievedAt: new Date().toISOString()
-        };
+  //       const result = {
+  //         valueSetId,
+  //         version: version || "latest",
+  //         conceptCount: concepts.length,
+  //         concepts: concepts,
+  //         codeSystemsFound: [...new Set(concepts.map(c => c.codeSystemName))],
+  //         status: "success",
+  //         retrievedAt: new Date().toISOString()
+  //       };
         
-        console.error(`Successfully retrieved ${concepts.length} concepts for ${valueSetId}`);
+  //       console.error(`Successfully retrieved ${concepts.length} concepts for ${valueSetId}`);
         
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(result, null, 2)
-          }]
-        };
+  //       return {
+  //         content: [{
+  //           type: "text",
+  //           text: JSON.stringify(result, null, 2)
+  //         }]
+  //       };
         
-      } catch (error) {
-        console.error(`VSAC fetch error for ${valueSetId}:`, error.message);
+  //     } catch (error) {
+  //       console.error(`VSAC fetch error for ${valueSetId}:`, error.message);
         
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              error: error.message,
-              valueSetId,
-              version: version || "Latest",
-              status: "failed",
-              timestamp: new Date().toISOString()
-            })
-          }],
-          isError: true
-        };
-      }
-    }
-  );
+  //       const errorResponse = {
+  //         error: error.message,
+  //         valueSetId,
+  //         version: version || "latest",
+  //         status: "failed",
+  //         timestamp: new Date().toISOString()
+  //       };
+        
+  //       // Add specific guidance for common errors
+  //       if (error.message.includes('401') || error.message.includes('authentication')) {
+  //         errorResponse.guidance = [
+  //           "Authentication failed - check your UMLS credentials",
+  //           "Verify credentials using: debug-vsac-auth tool",
+  //           "Ensure VSAC access is enabled in your UMLS profile",
+  //           "Check for extra whitespace in username/password"
+  //         ];
+  //       }
+        
+  //       return {
+  //         content: [{
+  //           type: "text",
+  //           text: JSON.stringify(errorResponse, null, 2)
+  //         }],
+  //         isError: true
+  //       };
+  //     }
+  //   }
+  // );
 
   // Additional tool for batch fetching multiple value sets
   server.tool(
@@ -110,14 +127,26 @@ export function fetchVsacTool(server) {
         };
         
       } catch (error) {
+        const errorResponse = {
+          error: error.message,
+          valueSetIds,
+          status: "batch_failed",
+          timestamp: new Date().toISOString()
+        };
+        
+        if (error.message.includes('401') || error.message.includes('authentication')) {
+          errorResponse.guidance = [
+            "Authentication failed during batch operation",
+            "Test single ValueSet first with fetch-vsac tool",
+            "Verify credentials using debug-vsac-auth tool",
+            "Check UMLS account status and VSAC access"
+          ];
+        }
+        
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({
-              error: error.message,
-              valueSetIds,
-              status: "batch_failed"
-            })
+            text: JSON.stringify(errorResponse, null, 2)
           }],
           isError: true
         };

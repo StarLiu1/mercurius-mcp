@@ -15,7 +15,8 @@
     "dev:http": "MCP_TRANSPORT=http nodemon mcp/transports/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:vsac": "node scripts/test-vsac.js"
+    "test:vsac": "node ../scripts/test-vsac.js",
+    "test:regex": "node ../scripts/test-regex-extraction.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

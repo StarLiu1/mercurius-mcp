@@ -3,7 +3,7 @@ const router = express.Router();
 const { extractValueSetIdentifiersFromCQL } = require('../../../tools/parseNlToCql/extractors');
 
 // Test endpoint for value set extraction
-router.post('/test-extraction', async (req, res) => {
+router.post('/valueset-regex-extraction', async (req, res) => {
   try {
     const { cql } = req.body;
     

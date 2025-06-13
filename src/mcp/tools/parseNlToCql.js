@@ -1,6 +1,7 @@
+// src/mcp/tools/parseNlToCql.js
 import { z } from "zod";
 import { parseToCql } from "./parseNlToCql/parser.js";
-import { extractValueSetIdentifiersFromCQL } from "./parseNlToCql/extractors.js";
+import { extractValueSetIdentifiersFromCQL, validateExtractedOids } from "./parseNlToCql/extractors.js";
 
 export function parseNlToCqlTool(server) {
   server.tool(
@@ -8,27 +9,202 @@ export function parseNlToCqlTool(server) {
     { query: z.string() },
     async ({ query }) => {
       try {
+        console.error("Converting natural language to CQL...");
         const cql = await parseToCql(query);
+        
+        console.error("Extracting ValueSet OIDs using valueset declaration pattern...");
         const valueSetReferences = await extractValueSetIdentifiersFromCQL(cql);
+        
+        // Validate extracted OIDs
+        const validation = validateExtractedOids(valueSetReferences);
+        
+        const result = {
+          cql,
+          valueSetReferences,
+          extractionMethod: "valueset_declaration_regex",
+          validation: {
+            validOids: validation.valid,
+            invalidOids: validation.invalid,
+            warnings: validation.warnings,
+            totalFound: valueSetReferences.length,
+            validCount: validation.valid.length
+          }
+        };
+        
+        // Log validation results
+        if (validation.invalid.length > 0) {
+          console.error("Invalid OIDs found:", validation.invalid);
+        }
+        if (validation.warnings.length > 0) {
+          console.error("OID warnings:", validation.warnings);
+        }
         
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({
-              cql,
-              valueSetReferences
-            })
+            text: JSON.stringify(result, null, 2)
           }]
         };
+        
       } catch (error) {
         return {
           content: [{
             type: "text",
-            text: `Error: ${error.message}`
+            text: JSON.stringify({
+              error: error.message,
+              query: query
+            }, null, 2)
           }],
           isError: true
         };
       }
     }
   );
+
+  // Enhanced tool for testing regex extraction on any CQL
+  server.tool(
+    "valueset-regex-extraction",
+    { 
+      cqlQuery: z.string(),
+      showDetails: z.boolean().optional().default(false)
+    },
+    async ({ cqlQuery, showDetails }) => {
+      try {
+        console.error("Testing regex extraction patterns...");
+        
+        const extractedOids = await extractValueSetIdentifiersFromCQL(cqlQuery);
+        const validOids = validateExtractedOids(extractedOids);
+        const invalidOids = extractedOids.filter(oid => !validOids.includes(oid));
+        
+        const result = {
+          input: cqlQuery,
+          extractedOids: extractedOids,
+          validOids: validOids,
+          invalidOids: invalidOids,
+          summary: {
+            totalFound: extractedOids.length,
+            validOids: validOids.length,
+            invalidOids: invalidOids.length
+          },
+          copyPastableArrays: {
+            extractedOids: JSON.stringify(extractedOids),
+            validOids: JSON.stringify(validOids),
+            invalidOids: JSON.stringify(invalidOids)
+          }
+        };
+        
+        // If detailed output requested, show regex test results for valueset pattern only
+        if (showDetails) {
+          result.detailedRegexTests = {};
+          
+          // Test valueset declaration pattern only
+          const valuesetPattern = /(valueset\s".+":\s')(urn:oid:)((\d+\.)*\d+)(')/gi;
+          const valuesetMatches = [];
+          let match;
+          while ((match = valuesetPattern.exec(cqlQuery)) !== null) {
+            valuesetMatches.push({
+              fullMatch: match[0],
+              group1: match[1], // valueset "name": '
+              group2: match[2], // urn:oid:
+              group3: match[3], // OID (what we extract)
+              group4: match[4], // '
+              index: match.index,
+              extractedOid: match[3]
+            });
+          }
+          result.detailedRegexTests.valuesetPattern = {
+            pattern: "(valueset\\s\".+\":\\s')(urn:oid:)((\\d+\\.)*\\d+)(')",
+            description: "Matches valueset declarations with single quotes and extracts group 3 (OID)",
+            matches: valuesetMatches
+          };
+        }
+        
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+        
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: error.message,
+              cqlQuery: cqlQuery
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // // Tool to demonstrate different CQL patterns that should be recognized
+  // server.tool(
+  //   "demo-cql-patterns",
+  //   {},
+  //   async () => {
+  //     const demoPatterns = {
+  //       description: "Examples of CQL patterns that will be matched by urn:oid regex only",
+  //       regexPattern: {
+  //         pattern: "urn:oid:(\\d*\\.\\d+(?:\\.\\d+)*)",
+  //         description: "Matches urn:oid:X.X.X format and extracts the OID part after urn:oid:"
+  //       },
+  //       examples: [
+  //         {
+  //           name: "urn:oid in condition reference",
+  //           cql: `define "Diabetes": [Condition: "urn:oid:2.16.840.1.113883.3.464.1003.103.12.1001"]`,
+  //           expectedOids: ["2.16.840.1.113883.3.464.1003.103.12.1001"],
+  //           willMatch: true
+  //         },
+  //         {
+  //           name: "urn:oid with single quotes",
+  //           cql: `define "Test": [Observation: 'urn:oid:2.16.840.1.113883.3.464.1003.198.12.1013']`,
+  //           expectedOids: ["2.16.840.1.113883.3.464.1003.198.12.1013"],
+  //           willMatch: true
+  //         },
+  //         {
+  //           name: "Multiple urn:oid references",
+  //           cql: `define "Cond1": [Condition: "urn:oid:2.16.840.1.113883.3.464.1003.103.12.1001"]
+  //                 define "Cond2": [Condition: "urn:oid:2.16.840.1.113883.3.464.1003.104.12.1002"]`,
+  //           expectedOids: [
+  //             "2.16.840.1.113883.3.464.1003.103.12.1001",
+  //             "2.16.840.1.113883.3.464.1003.104.12.1002"
+  //           ],
+  //           willMatch: true
+  //         },
+  //         {
+  //           name: "Direct OID without urn:oid prefix",
+  //           cql: `valueset "Diabetes": "2.16.840.1.113883.3.464.1003.103.12.1001"`,
+  //           expectedOids: [],
+  //           willMatch: false,
+  //           note: "Will NOT match - no urn:oid: prefix"
+  //         },
+  //         {
+  //           name: "ValueSet declaration with urn:oid",
+  //           cql: `valueset "Diabetes": "urn:oid:2.16.840.1.113883.3.464.1003.103.12.1001"`,
+  //           expectedOids: ["2.16.840.1.113883.3.464.1003.103.12.1001"],
+  //           willMatch: true
+  //         },
+  //         {
+  //           name: "Mixed formats (only urn:oid will match)",
+  //           cql: `valueset "Direct": "2.16.840.1.113883.3.464.1003.103.12.1001"
+  //                 define "WithUrn": [Condition: "urn:oid:2.16.840.1.113883.3.464.1003.104.12.1002"]`,
+  //           expectedOids: ["2.16.840.1.113883.3.464.1003.104.12.1002"],
+  //           willMatch: true,
+  //           note: "Only the urn:oid reference will be extracted"
+  //         }
+  //       ]
+  //     };
+
+  //     return {
+  //       content: [{
+  //         type: "text",
+  //         text: JSON.stringify(demoPatterns, null, 2)
+  //       }]
+  //     };
+  //   }
+  // );
 }

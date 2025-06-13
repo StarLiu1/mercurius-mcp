@@ -8,6 +8,8 @@
     # Development mode with OpenAI
     npm run dev:openai
 
+    LLM_PROVIDER=azure-openai mcp-inspector node mcp/transports/stdio.js
+
 2. Via environment variables:
     bash# Unix/Linux/Mac
     export LLM_PROVIDER=anthropic
