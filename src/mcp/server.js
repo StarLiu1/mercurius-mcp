@@ -22,7 +22,7 @@ export function createOMOPServer() {
   // processCqlQueryTool(server);
   fetchVsacTool(server);
   // debugVsacTool(server);      // Authentication debugging
-  exploreVsacTool(server);    // ValueSet exploration and search
+  // exploreVsacTool(server);    // ValueSet exploration and search
   mapToOmopTool(server);
   generateSqlTool(server);
 
