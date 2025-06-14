@@ -252,7 +252,7 @@ export function mapVsacToOmopTool(server) {
             extractedOids: extractionResult.oids,
             valuesets: extractionResult.valuesets,
             validation: validateExtractedOids(extractionResult.oids),
-            arrayAsStr: JSON.stringify(extractionResult.oids)
+            arrayAsStr: JSON.stringify(extractionResult.oids),
           };
         }
         
@@ -661,47 +661,54 @@ async function mapConceptsToOmopDatabase(concepts, cdmDatabaseSchema, dbConfig, 
       }
     };
     
-    // Step 2: Execute simplified queries to test basic functionality
-    console.error("Testing basic concept lookup...");
-    
-    try {
-      const basicTestQuery = `
-        SELECT COUNT(*) as concept_count
-        FROM ${cdmDatabaseSchema}.concept c
-        WHERE c.vocabulary_id IN ('ICD10CM', 'SNOMED', 'ICD9CM')
-      `;
-      
-      const basicTestResult = await client.query(basicTestQuery);
-      console.error(`Found ${basicTestResult.rows[0].concept_count} concepts in common vocabularies`);
-      results.databaseInfo.availableConcepts = parseInt(basicTestResult.rows[0].concept_count);
-      
-    } catch (testError) {
-      console.error("Basic concept test failed:", testError.message);
-      results.databaseInfo.basicTestError = testError.message;
-    }
-    
-    // Step 3: Try verbatim matching with simple query
+    // Step 3: Execute actual database queries for all mapping types
     if (options.includeVerbatim) {
-      console.error("Executing simplified verbatim matching query...");
+      console.error("Executing verbatim matching query...");
       try {
-        results.verbatim = await executeSimplifiedVerbatimQuery(client, tempTableName, cdmDatabaseSchema);
+        results.verbatim = await executeVerbatimQueryReal(client, tempTableName, cdmDatabaseSchema);
       } catch (verbatimError) {
         console.error("Verbatim query failed:", verbatimError.message);
         results.verbatimError = verbatimError.message;
         results.verbatim = [];
       }
+    } else {
+      results.verbatim = [];
     }
     
-    // Skip standard and mapped queries for now to isolate the issue
-    results.standard = [];
-    results.mapped = [];
+    if (options.includeStandard) {
+      console.error("Executing standard concept query...");
+      try {
+        results.standard = await executeStandardQueryReal(client, tempTableName, cdmDatabaseSchema);
+      } catch (standardError) {
+        console.error("Standard query failed:", standardError.message);
+        results.standardError = standardError.message;
+        results.standard = [];
+      }
+    } else {
+      results.standard = [];
+    }
     
-    // Generate basic summary
-    results.mappingSummary = {
-      totalSourceConcepts: concepts.length,
-      insertedConcepts: insertedCount,
-      verbatimMappings: results.verbatim ? results.verbatim.length : 0,
-      totalMappings: results.verbatim ? results.verbatim.length : 0
+    if (options.includeMapped) {
+      console.error("Executing mapped concept query...");
+      try {
+        results.mapped = await executeMappedQueryReal(client, tempTableName, cdmDatabaseSchema);
+      } catch (mappedError) {
+        console.error("Mapped query failed:", mappedError.message);
+        results.mappedError = mappedError.message;
+        results.mapped = [];
+      }
+    } else {
+      results.mapped = [];
+    }
+    
+    // Generate comprehensive summary based on actual results
+    results.mappingSummary = generateOmopMappingSummary(results, concepts);
+    
+    // Generate the actual SQL queries used
+    results.sql_queries = {
+      verbatim: generateVerbatimSQL(cdmDatabaseSchema, tempTableName),
+      standard: generateStandardSQL(cdmDatabaseSchema, tempTableName),
+      mapped: generateMappedSQL(cdmDatabaseSchema, tempTableName)
     };
     
     // Clean up temporary table
@@ -741,34 +748,6 @@ async function mapConceptsToOmopDatabase(concepts, cdmDatabaseSchema, dbConfig, 
   }
 }
 
-/**
- * Simplified verbatim query for testing
- */
-async function executeSimplifiedVerbatimQuery(client, tempTableName, cdmSchema) {
-  const verbatimQuery = `
-    SELECT t.concept_set_id, t.concept_code, t.vocabulary_id, 
-           c.concept_id, c.concept_name, c.domain_id
-    FROM ${tempTableName} t
-    INNER JOIN ${cdmSchema}.concept c
-    ON c.concept_code = t.concept_code
-    AND c.vocabulary_id = t.vocabulary_id
-    LIMIT 100
-  `;
-  
-  console.error("Executing simplified verbatim query...");
-  const result = await client.query(verbatimQuery);
-  console.error(`Simplified verbatim query returned ${result.rows.length} matches`);
-  
-  return result.rows.map(row => ({
-    concept_set_id: row.concept_set_id,
-    concept_id: parseInt(row.concept_id),
-    concept_code: row.concept_code,
-    vocabulary_id: row.vocabulary_id,
-    concept_name: row.concept_name,
-    domain_id: row.domain_id,
-    mapping_type: 'verbatim'
-  }));
-}
 
 /**
  * Create temporary table and insert concept data (like R script's dbWriteTable)
@@ -1291,55 +1270,63 @@ function mockOmopConceptId(conceptCode) {
 }
 
 /**
- * Generate SQL for verbatim concept matching
+ * Generate SQL for verbatim concept matching (with real table name)
  * @param {string} cdmDatabaseSchema 
+ * @param {string} tempTableName
  * @returns {string}
  */
-function generateVerbatimSQL(cdmDatabaseSchema) {
-  return `
-SELECT t.concept_set_id, c.concept_id AS concept_id
-FROM ${cdmDatabaseSchema}.concept c 
-INNER JOIN #temp_hee_concept_list t
-ON c.concept_code = t.concept_code
-AND c.vocabulary_id = t.vocabulary_id
-ORDER BY t.concept_set_id`;
-}
-
-/**
- * Generate SQL for standard concept matching
- * @param {string} cdmDatabaseSchema 
- * @returns {string}
- */
-function generateStandardSQL(cdmDatabaseSchema) {
-  return `
-SELECT t.concept_set_id, c.concept_id AS concept_id
-FROM ${cdmDatabaseSchema}.concept c 
-INNER JOIN #temp_hee_concept_list t
-ON c.concept_code = t.concept_code
-AND c.vocabulary_id = t.vocabulary_id
-AND c.standard_concept = 'S'
-ORDER BY t.concept_set_id`;
-}
-
-/**
- * Generate SQL for mapped concept matching
- * @param {string} cdmDatabaseSchema 
- * @returns {string}
- */
-function generateMappedSQL(cdmDatabaseSchema) {
-  return `
-SELECT concept_set_id, concept_id_2 AS concept_id
-FROM ${cdmDatabaseSchema}.concept c 
-INNER JOIN #temp_hee_concept_list t
-ON c.concept_code = t.concept_code
-AND c.vocabulary_id = t.vocabulary_id
-INNER JOIN ${cdmDatabaseSchema}.concept_relationship cr
-ON c.concept_id = cr.concept_id_1
-AND cr.relationship_id = 'Maps to'
-GROUP BY t.concept_set_id, cr.concept_id_2
-ORDER BY t.concept_set_id`;
-}
-
+function generateVerbatimSQL(cdmDatabaseSchema, tempTableName = "#temp_hee_concept_list") {
+    return `
+  SELECT t.concept_set_id, c.concept_id AS concept_id, c.concept_code, c.vocabulary_id,
+         c.domain_id, c.concept_class_id, c.concept_name
+  FROM ${cdmDatabaseSchema}.concept c 
+  INNER JOIN ${tempTableName} t
+  ON c.concept_code = t.concept_code
+  AND c.vocabulary_id = t.vocabulary_id
+  ORDER BY t.concept_set_id, c.concept_id`;
+  }
+  
+  /**
+   * Generate SQL for standard concept matching (with real table name)
+   * @param {string} cdmDatabaseSchema 
+   * @param {string} tempTableName
+   * @returns {string}
+   */
+  function generateStandardSQL(cdmDatabaseSchema, tempTableName = "#temp_hee_concept_list") {
+    return `
+  SELECT t.concept_set_id, c.concept_id AS concept_id, c.concept_code, c.vocabulary_id,
+         c.domain_id, c.concept_class_id, c.concept_name, c.standard_concept
+  FROM ${cdmDatabaseSchema}.concept c 
+  INNER JOIN ${tempTableName} t
+  ON c.concept_code = t.concept_code
+  AND c.vocabulary_id = t.vocabulary_id
+  AND c.standard_concept = 'S'
+  ORDER BY t.concept_set_id, c.concept_id`;
+  }
+  
+  /**
+   * Generate SQL for mapped concept matching (with real table name)
+   * @param {string} cdmDatabaseSchema 
+   * @param {string} tempTableName
+   * @returns {string}
+   */
+  function generateMappedSQL(cdmDatabaseSchema, tempTableName = "#temp_hee_concept_list") {
+    return `
+  SELECT t.concept_set_id, cr.concept_id_2 AS concept_id, c.concept_code, c.vocabulary_id,
+         c.concept_id as source_concept_id, cr.relationship_id,
+         target_c.concept_name, target_c.domain_id, target_c.concept_class_id, target_c.standard_concept
+  FROM ${cdmDatabaseSchema}.concept c 
+  INNER JOIN ${tempTableName} t
+  ON c.concept_code = t.concept_code
+  AND c.vocabulary_id = t.vocabulary_id
+  INNER JOIN ${cdmDatabaseSchema}.concept_relationship cr
+  ON c.concept_id = cr.concept_id_1
+  AND cr.relationship_id = 'Maps to'
+  INNER JOIN ${cdmDatabaseSchema}.concept target_c
+  ON cr.concept_id_2 = target_c.concept_id
+  ORDER BY t.concept_set_id, cr.concept_id_2`;
+  }
+  
 /**
  * Generate comprehensive mapping summary
  * @param {Array} extractedOids 
