@@ -7,6 +7,8 @@ import { fetchVsacTool } from "./tools/fetchVsac.js";
 import { exploreVsacTool } from "./tools/exploreVsac.js";
 import { mapToOmopTool } from "./tools/mapToOmop.js";
 import { generateSqlTool } from "./tools/generateSql.js";
+import { mapVsacToOmopTool } from "./tools/mapVsacToOmop.js";
+
 
 import { configResource } from "./resources/config.js";
 import { schemaResource } from "./resources/schema.js";
@@ -23,6 +25,9 @@ export function createOMOPServer() {
   fetchVsacTool(server);
   // debugVsacTool(server);      // Authentication debugging
   // exploreVsacTool(server);    // ValueSet exploration and search
+
+  mapVsacToOmopTool(server);         // Complete VSAC to OMOP pipeline
+
   mapToOmopTool(server);
   generateSqlTool(server);
 
