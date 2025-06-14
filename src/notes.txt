@@ -43,3 +43,15 @@
 
     # Get current provider
     node scripts/cli.js get-provider
+
+
+
+
+06/13/25
+- from cql
+    - extract OIDs
+    - fetch valueset concept set
+    - connect to omop DB
+    - map to omop concepts
+        - get LLM to get a first pass through the mapped concepts via relationships to determine eligibility
+        

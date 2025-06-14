@@ -3,3 +3,4 @@ src/.env
 src/.env.example
 src/package-lock.json
 /old scripts
+src/notes.txt
