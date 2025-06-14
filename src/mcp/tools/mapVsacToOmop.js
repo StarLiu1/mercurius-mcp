@@ -1,4 +1,9 @@
 // src/mcp/tools/mapVsacToOmop.js
+
+/**
+ * RBB 6/14/2025 - Switched concept_relationship to concept_relationship_new
+ * Make sure to switch back to concept_relationship on release
+ */
 import { z } from "zod";
 import { extractValueSetIdentifiersFromCQL, validateExtractedOids } from "./parseNlToCql/extractors.js";
 import vsacService from "../../services/vsacService.js";
@@ -552,7 +557,7 @@ async function mapConceptsToOmopDatabase(concepts, cdmDatabaseSchema, dbConfig, 
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = $1 
-      AND table_name IN ('concept', 'concept_relationship')
+      AND table_name IN ('concept', 'concept_relationship_new')
       ORDER BY table_name
     `;
     
@@ -950,7 +955,7 @@ async function executeMappedQueryReal(client, tempTableName, cdmSchema) {
     INNER JOIN ${tempTableName} t
     ON c.concept_code = t.concept_code
     AND c.vocabulary_id = t.vocabulary_id
-    INNER JOIN ${cdmSchema}.concept_relationship cr
+    INNER JOIN ${cdmSchema}.concept_relationship_new cr
     ON c.concept_id = cr.concept_id_1
     AND cr.relationship_id = 'Maps to'
     INNER JOIN ${cdmSchema}.concept target_c
@@ -1319,7 +1324,7 @@ function generateVerbatimSQL(cdmDatabaseSchema, tempTableName = "#temp_hee_conce
   INNER JOIN ${tempTableName} t
   ON c.concept_code = t.concept_code
   AND c.vocabulary_id = t.vocabulary_id
-  INNER JOIN ${cdmDatabaseSchema}.concept_relationship cr
+  INNER JOIN ${cdmDatabaseSchema}.concept_relationship_new cr
   ON c.concept_id = cr.concept_id_1
   AND cr.relationship_id = 'Maps to'
   INNER JOIN ${cdmDatabaseSchema}.concept target_c
