@@ -98,11 +98,30 @@ export function fetchVsacTool(server) {
     "fetch-multiple-vsac",
     {
       valueSetIds: z.array(z.string()),
-      username: z.string(),
-      password: z.string()
+      username: z.string().optional().default(process.env.VSAC_USERNAME || ''),
+      password: z.string().optional().default(process.env.VSAC_PASSWORD || '')
     },
     async ({ valueSetIds, username, password }) => {
       try {
+        // Validate credentials
+        if (!username || !password) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: "VSAC credentials are required",
+                message: "Set VSAC_USERNAME and VSAC_PASSWORD environment variables, or pass them as parameters",
+                environmentVariables: {
+                  VSAC_USERNAME: process.env.VSAC_USERNAME ? "SET" : "NOT SET",
+                  VSAC_PASSWORD: process.env.VSAC_PASSWORD ? "SET" : "NOT SET"
+                },
+                valueSetIds
+              }, null, 2)
+            }],
+            isError: true
+          };
+        }
+
         console.error(`Batch fetching ${valueSetIds.length} VSAC value sets`);
         
         const results = await vsacService.retrieveMultipleValueSets(
@@ -116,6 +135,13 @@ export function fetchVsacTool(server) {
           successfulRetrievals: Object.keys(results).filter(oid => results[oid].length > 0).length,
           totalConcepts: Object.values(results).flat().length,
           results: results,
+          credentialsUsed: {
+            username: username,
+            fromEnvironment: {
+              username: username === process.env.VSAC_USERNAME,
+              password: password === process.env.VSAC_PASSWORD
+            }
+          },
           retrievedAt: new Date().toISOString()
         };
         
@@ -131,14 +157,18 @@ export function fetchVsacTool(server) {
           error: error.message,
           valueSetIds,
           status: "batch_failed",
+          credentialsChecked: {
+            username: username ? "PROVIDED" : "MISSING",
+            password: password ? "PROVIDED" : "MISSING"
+          },
           timestamp: new Date().toISOString()
         };
         
         if (error.message.includes('401') || error.message.includes('authentication')) {
           errorResponse.guidance = [
             "Authentication failed during batch operation",
-            "Test single ValueSet first with fetch-vsac tool",
-            "Verify credentials using debug-vsac-auth tool",
+            "Verify VSAC_USERNAME and VSAC_PASSWORD environment variables",
+            "Test credentials using debug-vsac-auth tool",
             "Check UMLS account status and VSAC access"
           ];
         }
@@ -166,6 +196,10 @@ export function fetchVsacTool(server) {
           text: JSON.stringify({
             cacheSize: stats.size,
             cachedValueSets: stats.keys,
+            environmentVariables: {
+              VSAC_USERNAME: process.env.VSAC_USERNAME ? "SET" : "NOT SET",
+              VSAC_PASSWORD: process.env.VSAC_PASSWORD ? "SET" : "NOT SET"
+            },
             status: "cache_info"
           }, null, 2)
         }]

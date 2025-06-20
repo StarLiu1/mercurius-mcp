@@ -17,14 +17,14 @@ export function mapVsacToOmopTool(server) {
     "map-vsac-to-omop",
     {
       cqlQuery: z.string(),
-      vsacUsername: z.string(),
-      vsacPassword: z.string(),
+      vsacUsername: z.string().optional().default(process.env.VSAC_USERNAME || ''),
+      vsacPassword: z.string().optional().default(process.env.VSAC_PASSWORD || ''),
       // Database connection parameters
-      databaseUser: z.string().default("dbadmin"),
-      databaseEndpoint: z.string().default("52.167.131.85"),
-      databaseName: z.string().default("tufts"),
-      databasePassword: z.string(),
-      omopDatabaseSchema: z.string().optional().default("cdm"),
+      databaseUser: z.string().optional().default(process.env.DATABASE_USER || 'dbadmin'),
+      databaseEndpoint: z.string().optional().default(process.env.DATABASE_ENDPOINT || '52.167.131.85'),
+      databaseName: z.string().optional().default(process.env.DATABASE_NAME || 'tufts'),
+      databasePassword: z.string().optional().default(process.env.DATABASE_PASSWORD || ''),
+      omopDatabaseSchema: z.string().optional().default(process.env.OMOP_DATABASE_SCHEMA || 'dbo'),
       // Mapping options
       includeVerbatim: z.boolean().optional().default(true),
       includeStandard: z.boolean().optional().default(true),
@@ -58,8 +58,44 @@ export function mapVsacToOmopTool(server) {
       targetFactTables
     }) => {
       try {
-        console.error("Starting VSAC to OMOP mapping pipeline with real database...");
-        
+        // Validate required credentials
+        if (!vsacUsername || !vsacPassword) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                error: "VSAC credentials are required",
+                message: "Set VSAC_USERNAME and VSAC_PASSWORD environment variables, or pass them as parameters",
+                environmentVariables: {
+                  VSAC_USERNAME: process.env.VSAC_USERNAME ? "SET" : "NOT SET",
+                  VSAC_PASSWORD: process.env.VSAC_PASSWORD ? "SET" : "NOT SET"
+                }
+              }, null, 2)
+            }],
+            isError: true
+          };
+        }
+
+        if (!databasePassword) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                error: "Database password is required",
+                message: "Set DATABASE_PASSWORD environment variable, or pass it as a parameter",
+                environmentVariables: {
+                  DATABASE_PASSWORD: process.env.DATABASE_PASSWORD ? "SET" : "NOT SET"
+                }
+              }, null, 2)
+            }],
+            isError: true
+          };
+        }
+        console.error("Starting VSAC to OMOP mapping pipeline with environment variable defaults...");
+        console.error(`Using VSAC username: ${vsacUsername}`);
+        console.error(`Using database: ${databaseEndpoint}/${databaseName}`);
         // Step 1: Extract ValueSet OIDs from CQL
         console.error("Step 1: Extracting ValueSet OIDs from CQL...");
         const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
@@ -168,6 +204,13 @@ export function mapVsacToOmopTool(server) {
             type: "text",
             text: JSON.stringify({
               success: true,
+              message: "VSAC to OMOP mapping completed successfully using environment variables",
+              credentialsUsed: {
+                vsacUsername: vsacUsername,
+                databaseEndpoint: databaseEndpoint,
+                databaseName: databaseName,
+                omopSchema: omopDatabaseSchema
+              },
               summary,
               pipeline: {
                 step1_extraction: {
@@ -185,13 +228,6 @@ export function mapVsacToOmopTool(server) {
                   standard: omopMappingResults.standard || [],
                   mapped: omopMappingResults.mapped || []
                 }
-              },
-              database: {
-                endpoint: databaseEndpoint,
-                database: databaseName,
-                user: databaseUser,
-                schema: omopDatabaseSchema,
-                targetFactTables: targetFactTables
               },
               metadata: {
                 processingTime: new Date().toISOString(),
@@ -216,10 +252,9 @@ export function mapVsacToOmopTool(server) {
               success: false,
               error: error.message,
               step: "Pipeline execution failed",
-              database: {
-                endpoint: databaseEndpoint,
-                database: databaseName,
-                user: databaseUser
+              credentialsChecked: {
+                vsacUsername: vsacUsername ? "PROVIDED" : "MISSING",
+                databasePassword: databasePassword ? "PROVIDED" : "MISSING"
               },
               timestamp: new Date().toISOString()
             }, null, 2)
@@ -236,19 +271,35 @@ export function mapVsacToOmopTool(server) {
     {
       step: z.enum(["extract", "fetch", "map", "all"]),
       cqlQuery: z.string(),
-      vsacUsername: z.string().optional(),
-      vsacPassword: z.string().optional(),
+      // Optional credential overrides - use environment variables as defaults
+      vsacUsername: z.string().optional().default(process.env.VSAC_USERNAME || ''),
+      vsacPassword: z.string().optional().default(process.env.VSAC_PASSWORD || ''),
       testOids: z.array(z.string()).optional(),
       // Database parameters for map step
-      databaseUser: z.string().optional().default("dbadmin"),
-      databaseEndpoint: z.string().optional().default("52.167.131.85"),
-      databaseName: z.string().optional().default("tufts"),
-      databasePassword: z.string().optional(),
-      omopDatabaseSchema: z.string().optional().default("cdm")
+      databaseUser: z.string().optional().default(process.env.DATABASE_USER || "dbadmin"),
+      databaseEndpoint: z.string().optional().default(process.env.DATABASE_ENDPOINT || "52.167.131.85"),
+      databaseName: z.string().optional().default(process.env.DATABASE_NAME || "tufts"),
+      databasePassword: z.string().optional().default(process.env.DATABASE_PASSWORD || ''),
+      omopDatabaseSchema: z.string().optional().default(process.env.OMOP_DATABASE_SCHEMA || "dbo")
     },
     async ({ step, cqlQuery, vsacUsername, vsacPassword, testOids, databaseUser, databaseEndpoint, databaseName, databasePassword, omopDatabaseSchema }) => {
       try {
-        const results = {};
+        const results = {
+          environmentVariables: {
+            VSAC_USERNAME: process.env.VSAC_USERNAME ? "SET" : "NOT SET",
+            VSAC_PASSWORD: process.env.VSAC_PASSWORD ? "SET" : "NOT SET", 
+            DATABASE_PASSWORD: process.env.DATABASE_PASSWORD ? "SET" : "NOT SET",
+            DATABASE_USER: process.env.DATABASE_USER || "dbadmin (default)",
+            DATABASE_ENDPOINT: process.env.DATABASE_ENDPOINT || "52.167.131.85 (default)",
+            DATABASE_NAME: process.env.DATABASE_NAME || "tufts (default)",
+            OMOP_DATABASE_SCHEMA: process.env.OMOP_DATABASE_SCHEMA || "cdm (default)"
+          },
+          credentialsUsed: {
+            vsacUsername: vsacUsername || "NOT PROVIDED",
+            databaseEndpoint: databaseEndpoint,
+            databaseName: databaseName
+          }
+        };
         
         if (step === "extract" || step === "all") {
           console.error("Testing extraction step...");

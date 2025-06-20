@@ -4,3 +4,4 @@ src/.env.example
 src/package-lock.json
 /old scripts
 src/notes.txt
+run-mcp.sh
