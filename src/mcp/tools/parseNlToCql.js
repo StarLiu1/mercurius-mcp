@@ -66,9 +66,10 @@ export function parseNlToCqlTool(server) {
     "valueset-regex-extraction",
     { 
       cqlQuery: z.string(),
-      showDetails: z.boolean().optional().default(false)
+      showDetails: z.boolean().optional().default(false),
+      includeInput: z.boolean().optional().default(false) // New parameter to control input echoing
     },
-    async ({ cqlQuery, showDetails }) => {
+    async ({ cqlQuery, showDetails, includeInput }) => {
       try {
         console.error("Testing regex extraction patterns...");
         
@@ -80,8 +81,9 @@ export function parseNlToCqlTool(server) {
         const invalidOids = extractedOids.filter(oid => !validOids.includes(oid));
         
         const result = {
-          input: cqlQuery,
-          extractedOids: valuesets, // JSON array with name/oid pairs
+          ...(includeInput && { input: cqlQuery }),
+
+          extractedValueSets: valuesets, // JSON array with name/oid pairs
           validOids: validOids,
           invalidOids: invalidOids,
           summary: {
@@ -140,6 +142,43 @@ export function parseNlToCqlTool(server) {
             text: JSON.stringify({
               error: error.message,
               cqlQuery: cqlQuery
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+  // Quick extraction tool - minimal output, no input echo
+  server.tool(
+    "extract-valuesets",
+    { 
+      cqlQuery: z.string()
+    },
+    async ({ cqlQuery }) => {
+      try {
+        const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
+        const extractedOids = extractionResult.oids;
+        const valuesets = extractionResult.valuesets;
+        
+        // Minimal, clean output
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              valuesets: valuesets,
+              oids: extractedOids,
+              count: extractedOids.length
+            }, null, 2)
+          }]
+        };
+        
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: error.message
             }, null, 2)
           }],
           isError: true
