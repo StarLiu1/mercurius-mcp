@@ -156,9 +156,11 @@ export function parseNlToCqlTool(server) {
   server.tool(
     "extract-valuesets",
     { 
-      cqlQuery: z.string()
+      cqlQuery: z.string(),
+      includeInput: z.boolean().optional().default(false) // New parameter to control input echoing
+
     },
-    async ({ cqlQuery }) => {
+    async ({ cqlQuery, includeInput }) => {
       try {
         const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
         const extractedOids = extractionResult.oids;
