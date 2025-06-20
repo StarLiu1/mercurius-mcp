@@ -6,8 +6,11 @@ import { extractValueSetIdentifiersFromCQL, validateExtractedOids } from "./pars
 export function parseNlToCqlTool(server) {
   server.tool(
     "parse-nl-to-cql",
-    { query: z.string() },
-    async ({ query }) => {
+    { query: z.string(),
+      includeInput: z.boolean().optional().default(false) // New parameter to control input echoing
+
+     },
+    async ({ query, includeInput}) => {
       try {
         console.error("Converting natural language to CQL...");
         const cql = await parseToCql(query);
@@ -19,7 +22,7 @@ export function parseNlToCqlTool(server) {
         const validation = validateExtractedOids(valueSetReferences);
         
         const result = {
-          cql,
+          ...(includeInput && { input: cqlQuery }),
           valueSetReferences,
           extractionMethod: "valueset_declaration_regex",
           validation: {
