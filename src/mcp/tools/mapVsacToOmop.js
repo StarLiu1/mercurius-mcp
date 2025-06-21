@@ -4,9 +4,124 @@
  * RBB 6/14/2025 - Switched concept_relationship to concept_relationship_new
  * Make sure to switch back to concept_relationship on release
  */
+
+process.on('uncaughtException', err => {
+  console.error('[UNCAUGHT]', err.name, err.message, '\n', err.stack);
+  process.exit(1);   // ensures the SDK sees nothing on stdout
+});
+
 import { z } from "zod";
 import { extractValueSetIdentifiersFromCQL, validateExtractedOids } from "./parseNlToCql/extractors.js";
 import vsacService from "../../services/vsacService.js";
+import e from "express";
+
+/**
+ * Build the flattened concept list for OMOP mapping **and** a per-ValueSet summary.
+ * Replaces the ad-hoc “Step 3” loop that used to iterate directly over vsacResults.
+ *
+ * @param {Object} vsacResults – Object returned by retrieveMultipleValueSets
+ *                               Shape: { [oid]: { metadata, concepts:[…] } }
+ * @param {Array}  valuesets   – Array from extractValueSetIdentifiersFromCQL (holds names)
+ * @returns {{ conceptsForMapping:Array, valueSetSummary:Object }}
+ */
+function prepareConceptsAndSummary(vsacResults, valuesets) {
+  const conceptsForMapping = [];
+  const valueSetSummary    = {};
+
+  for (const [oid, vsacSet] of Object.entries(vsacResults)) {
+    // Always get an array (fallback to empty)
+    const concepts = Array.isArray(vsacSet?.concepts) ? vsacSet.concepts : [];
+
+    if (concepts.length === 0) {
+      valueSetSummary[oid] = {
+        conceptCount     : 0,
+        codeSystemsFound : [],
+        status           : 'empty',
+        metadata       : vsacSet.metadata,
+        description    : vsacSet.metadata?.description ?? null,
+        dataElementScope : vsacSet.metadata?.dataElementScope ?? null,
+        clinicalFocus : vsacSet.metadata?.clinicalFocus ?? null,
+        inclusionCriteria : vsacSet.metadata?.inclusionCriteria ?? null,
+        exclusionCriteria : vsacSet.metadata?.exclusionCriteria ?? null,
+      };
+      continue;
+    }
+
+    // Friendly name from CQL extraction (if available)
+    const vsInfo       = valuesets.find(vs => vs.oid === oid);
+    const valueSetName = vsInfo ? vsInfo.name : `Unknown_${oid}`;
+
+    // Track summary stats
+    const codeSystemsFound = [...new Set(concepts.map(c => c.codeSystemName))];
+    valueSetSummary[oid]   = {
+      name           : valueSetName,
+      conceptCount   : concepts.length,
+      codeSystemsFound,
+      status         : 'success',
+      description    : vsacSet.metadata?.description ?? null,
+      dataElementScope : vsacSet.metadata?.dataElementScope ?? null,
+      clinicalFocus : vsacSet.metadata?.clinicalFocus ?? null,
+      inclusionCriteria : vsacSet.metadata?.inclusionCriteria ?? null,
+      exclusionCriteria : vsacSet.metadata?.exclusionCriteria ?? null,
+    };
+
+    // Flatten for OMOP mapping
+    concepts.forEach(c => {
+      conceptsForMapping.push({
+        concept_set_id     : oid,
+        concept_set_name   : valueSetName,
+        concept_code       : c.code,
+        vocabulary_id      : mapVsacToOmopVocabulary(c.codeSystemName),
+        original_vocabulary: c.codeSystemName,
+        display_name       : c.displayName,
+        code_system        : c.codeSystem,
+      });
+    });
+  }
+
+  return { conceptsForMapping, valueSetSummary };
+}
+
+/**
+ * Build a concise diagnostic object for the VSAC-fetch step in the debug tool.
+ * Drops in for the block that calculated totalConceptsRetrieved / detailedSummary
+ * directly on vsacResults.
+ *
+ * @param {Object} vsacResults – Object returned by retrieveMultipleValueSets
+ * @returns {Object}           – Stats + detailedSummary (same keys used before)
+ */
+function summariseVsacFetch(vsacResults) {
+  const summary = {
+    totalRequested        : Object.keys(vsacResults).length,
+    successfulRetrievals  : 0,
+    totalConceptsRetrieved: 0,
+    results               : vsacResults,
+    detailedSummary       : [],
+    retrievedAt           : new Date().toISOString(),
+  };
+
+  for (const [oid, vsacSet] of Object.entries(vsacResults)) {
+    const concepts = Array.isArray(vsacSet?.concepts) ? vsacSet.concepts : [];
+
+    if (concepts.length) summary.successfulRetrievals += 1;
+    summary.totalConceptsRetrieved += concepts.length;
+
+    summary.detailedSummary.push({
+      oid,
+      conceptCount   : concepts.length,
+      codeSystemsFound: [...new Set(concepts.map(c => c.codeSystemName))],
+      status         : concepts.length ? 'success' : 'empty',
+      metadata       : vsacSet.metadata,
+      sampleConcepts : concepts.slice(0, 3).map(c => ({
+        code          : c.code,
+        displayName   : c.displayName,
+        codeSystemName: c.codeSystemName,
+      })),
+    });
+  }
+
+  return summary;
+}
 
 /**
  * Complete VSAC to OMOP mapping pipeline tool
@@ -129,45 +244,8 @@ export function mapVsacToOmopTool(server) {
         
         // Step 3: Prepare concept data for OMOP mapping
         console.error("Step 3: Preparing concept data for OMOP mapping...");
-        const conceptsForMapping = [];
-        const valueSetSummary = {};
-        
-        for (const [oid, concepts] of Object.entries(vsacResults)) {
-          if (!concepts || concepts.length === 0) {
-            console.error(`No concepts found for ValueSet: ${oid}`);
-            valueSetSummary[oid] = {
-              conceptCount: 0,
-              codeSystemsFound: [],
-              status: 'empty'
-            };
-            continue;
-          }
-          
-          // Find the ValueSet name from our extraction results
-          const valuesetInfo = valuesets.find(vs => vs.oid === oid);
-          const valuesetName = valuesetInfo ? valuesetInfo.name : `Unknown_${oid}`;
-          
-          const codeSystemsFound = [...new Set(concepts.map(c => c.codeSystemName))];
-          valueSetSummary[oid] = {
-            name: valuesetName,
-            conceptCount: concepts.length,
-            codeSystemsFound: codeSystemsFound,
-            status: 'success'
-          };
-          
-          // Prepare concepts for OMOP mapping
-          for (const concept of concepts) {
-            conceptsForMapping.push({
-              concept_set_id: oid,
-              concept_set_name: valuesetName,
-              concept_code: concept.code,
-              vocabulary_id: mapVsacToOmopVocabulary(concept.codeSystemName),
-              original_vocabulary: concept.codeSystemName,
-              display_name: concept.displayName,
-              code_system: concept.codeSystem
-            });
-          }
-        }
+            const { conceptsForMapping, valueSetSummary } =
+                prepareConceptsAndSummary(vsacResults, valuesets);
         
         console.error(`Prepared ${conceptsForMapping.length} concepts for OMOP mapping`);
         
@@ -336,34 +414,9 @@ export function mapVsacToOmopTool(server) {
               vsacUsername,
               vsacPassword
             );
-            
-            // Calculate detailed statistics like fetch-multiple-vsac does
-            const totalConceptsRetrieved = Object.values(vsacResults).reduce((sum, concepts) => sum + concepts.length, 0);
-            const successfulRetrievals = Object.keys(vsacResults).filter(oid => vsacResults[oid].length > 0).length;
-            
-            results.vsacFetch = {
-              totalRequested: oidsToTest.length,
-              successfulRetrievals: successfulRetrievals,
-              totalConceptsRetrieved: totalConceptsRetrieved,
-              results: vsacResults,
-              detailedSummary: Object.entries(vsacResults).map(([oid, concepts]) => {
-                const codeSystemsFound = [...new Set(concepts.map(c => c.codeSystemName))];
-                return {
-                  oid,
-                  conceptCount: concepts.length,
-                  codeSystemsFound: codeSystemsFound,
-                  status: concepts.length > 0 ? 'success' : 'empty',
-                  sampleConcepts: concepts.slice(0, 3).map(c => ({
-                    code: c.code,
-                    displayName: c.displayName,
-                    codeSystemName: c.codeSystemName
-                  }))
-                };
-              }),
-              retrievedAt: new Date().toISOString()
-            };
-            
-            console.error(`VSAC fetch completed: ${successfulRetrievals}/${oidsToTest.length} ValueSets, ${totalConceptsRetrieved} total concepts`);
+            const stats       = summariseVsacFetch(vsacResults);
+            results.vsacFetch = stats;
+            console.error(`VSAC fetch completed: ${stats.successfulRetrievals}/${stats.totalRequested} ValueSets, ${stats.totalConceptsRetrieved} total concepts`);
           }
         }
         
@@ -377,7 +430,8 @@ export function mapVsacToOmopTool(server) {
             // Convert VSAC results to concept mapping format
             console.error("Using real VSAC concept data for mapping test...");
             
-            for (const [oid, vsacConcepts] of Object.entries(results.vsacFetch.results)) {
+            for (const [oid, vsacSet] of Object.entries(results.vsacFetch.results)) {
+              const vsacConcepts = Array.isArray(vsacSet?.concepts) ? vsacSet.concepts : [];
               // Find the ValueSet name from extraction results
               const valuesetInfo = results.extraction?.valuesets?.find(vs => vs.oid === oid);
               const valuesetName = valuesetInfo ? valuesetInfo.name : `ValueSet_${oid}`;

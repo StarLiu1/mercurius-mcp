@@ -268,6 +268,16 @@ class VSACService {
       } else if (valueSet.Purpose) {
         purposeText = valueSet.Purpose;
       }
+  
+            // Description (VSAC uses <Description>; some profiles fold it into <Purpose>)
+      if (valueSet['ns0:Description']) {
+        result.metadata.description = valueSet['ns0:Description'];
+      } else if (valueSet.Description) {
+        result.metadata.description = valueSet.Description;
+      } else if (!result.metadata.description && purposeText) {
+        // Fallback: first sentence of Purpose
+        result.metadata.description = purposeText.split('.').shift().trim();
+      }
       
       if (purposeText) {
         const purposeMetadata = this.parsePurposeField(purposeText);
@@ -353,6 +363,7 @@ class VSACService {
           binding: null,
           status: 'ERROR',
           revisionDate: null,
+          description: null,
           clinicalFocus: null,
           dataElementScope: null,
           inclusionCriteria: null,
@@ -376,43 +387,61 @@ class VSACService {
    * @returns {Promise<Object>} Object mapping OID to value set objects
    */
   async retrieveMultipleValueSets(valueSetIds, username, password) {
-    const results = {};
-    
-    // Process in parallel but with reasonable concurrency
-    const concurrency = 3;
+    const results      = {};
+    const concurrency  = 3;
+    console.log(JSON.stringify(results, null, 2));   // after retrieveMultipleValueSets
+
+    const normalize = (raw, oid) => {
+      // 1. Handle FHIR `$expand` → expansion.contains
+      if (raw?.expansion?.contains) {
+        raw.concepts = raw.expansion.contains;
+      }
+
+      // 2. VSAC sometimes nests concepts under ConceptList / concept
+      if (!raw.concepts && raw.ConceptList?.Concept) {
+        raw.concepts = raw.ConceptList.Concept;
+      }
+
+      // 3. Single-concept collapse: wrap object → array
+      if (!Array.isArray(raw.concepts)) {
+        raw.concepts = raw.concepts ? [raw.concepts] : [];
+      }
+
+      // 4. Minimal metadata sanity
+      raw.metadata = raw.metadata || {};
+      raw.metadata.id = raw.metadata.id || oid;
+
+      return raw;
+    };
+
+    const makeErrorShell = (oid, err) => ({
+      metadata: { id: oid, displayName: 'Error', status: 'ERROR' },
+      concepts: [],
+      error   : err instanceof Error ? err.message : String(err),
+    });
+
+    // Slice into batches of <concurrency>
     for (let i = 0; i < valueSetIds.length; i += concurrency) {
-      const batch = valueSetIds.slice(i, i + concurrency);
-      
+      const batch    = valueSetIds.slice(i, i + concurrency);
       const promises = batch.map(async (oid) => {
         try {
-          const valueSetData = await this.retrieveValueSet(oid, null, username, password);
-          return { oid, valueSetData };
-        } catch (error) {
-          console.error(`Failed to retrieve value set ${oid}:`, error.message);
-          return { 
-            oid, 
-            valueSetData: {
-              metadata: {
-                id: oid,
-                displayName: 'Error',
-                status: 'ERROR'
-              },
-              concepts: [],
-              error: error.message
-            }
-          };
+          const raw = await this.retrieveValueSet(oid, null, username, password);
+          return { oid, valueSetData: normalize(raw, oid) };
+        } catch (err) {
+          console.error(`Failed to retrieve value set ${oid}:`, err);
+          return { oid, valueSetData: makeErrorShell(oid, err) };
         }
       });
-      
+
+      // Wait for the current batch before starting the next
       const batchResults = await Promise.all(promises);
-      for (const result of batchResults) {
-        results[result.oid] = result.valueSetData;
-      }
+      batchResults.forEach(({ oid, valueSetData }) => {
+        results[oid] = valueSetData;
+      });
     }
-    
+
     return results;
   }
-
   /**
    * Get only concepts from a value set (backwards compatibility)
    * @param {string} valueSetIdentifier 
