@@ -15,3 +15,5 @@
     - map to omop concepts
         - get LLM to get a first pass through the mapped concepts via relationships to determine eligibility
         
+
+Next todo: streamable http, executable sql, output to csv
