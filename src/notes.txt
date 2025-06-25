@@ -17,3 +17,4 @@
         
 
 Next todo: streamable http, executable sql, output to csv
+ICL + MCP?
