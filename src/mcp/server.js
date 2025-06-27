@@ -15,7 +15,7 @@ import { schemaResource } from "./resources/schema.js";
 
 export function createOMOPServer() {
   const server = new McpServer({
-    name: "OMOP-NLP-Translator",
+    name: "Mercurius MCP: eCQM-OMOP-Translator",
     version: "1.0.0"
   });
 
