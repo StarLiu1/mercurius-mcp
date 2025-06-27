@@ -1,8 +1,8 @@
 {
-  "name": "omop-nlp-translator",
+  "name": "mercurius-mcp",
   "version": "0.1.0",
   "type": "module",
-  "description": "A translation engine that converts natural language queries into OMOP-compatible SQL",
+  "description": "A translation engine that converts eCQM into OMOP-compatible SQL",
   "main": "mcp/transports/index.js",
   "bin": {
     "omop-mcp": "./mcp/transports/stdio.js"

@@ -66,7 +66,7 @@ export function parseNlToCqlTool(server) {
 
   // Enhanced tool for testing regex extraction on any CQL
   server.tool(
-    "valueset-regex-extraction",
+    "extract-valuesets",
     { 
       cqlQuery: z.string(),
       showDetails: z.boolean().optional().default(false),
@@ -153,44 +153,44 @@ export function parseNlToCqlTool(server) {
     }
   );
   // Quick extraction tool - minimal output, no input echo
-  server.tool(
-    "extract-valuesets",
-    { 
-      cqlQuery: z.string(),
-      includeInput: z.boolean().optional().default(false) // New parameter to control input echoing
+  // server.tool(
+  //   "extract-valuesets",
+  //   { 
+  //     cqlQuery: z.string(),
+  //     includeInput: z.boolean().optional().default(false) // New parameter to control input echoing
 
-    },
-    async ({ cqlQuery, includeInput }) => {
-      try {
-        const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
-        const extractedOids = extractionResult.oids;
-        const valuesets = extractionResult.valuesets;
+  //   },
+  //   async ({ cqlQuery, includeInput }) => {
+  //     try {
+  //       const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
+  //       const extractedOids = extractionResult.oids;
+  //       const valuesets = extractionResult.valuesets;
         
-        // Minimal, clean output
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              valuesets: valuesets,
-              oids: extractedOids,
-              count: extractedOids.length
-            }, null, 2)
-          }]
-        };
+  //       // Minimal, clean output
+  //       return {
+  //         content: [{
+  //           type: "text",
+  //           text: JSON.stringify({
+  //             valuesets: valuesets,
+  //             oids: extractedOids,
+  //             count: extractedOids.length
+  //           }, null, 2)
+  //         }]
+  //       };
         
-      } catch (error) {
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              error: error.message
-            }, null, 2)
-          }],
-          isError: true
-        };
-      }
-    }
-  );
+  //     } catch (error) {
+  //       return {
+  //         content: [{
+  //           type: "text",
+  //           text: JSON.stringify({
+  //             error: error.message
+  //           }, null, 2)
+  //         }],
+  //         isError: true
+  //       };
+  //     }
+  //   }
+  // );
   // // Tool to demonstrate different CQL patterns that should be recognized
   // server.tool(
   //   "demo-cql-patterns",
