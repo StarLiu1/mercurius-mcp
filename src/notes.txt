@@ -18,3 +18,6 @@
 
 Next todo: streamable http, executable sql, output to csv
 ICL + MCP?
+
+What tools do you have
+

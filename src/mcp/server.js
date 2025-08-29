@@ -8,6 +8,8 @@ import { exploreVsacTool } from "./tools/exploreVsac.js";
 import { mapToOmopTool } from "./tools/mapToOmop.js";
 import { generateSqlTool } from "./tools/generateSql.js";
 import { mapVsacToOmopTool } from "./tools/mapVsacToOmop.js";
+import { lookupLoincCodeTool } from "./tools/lookupLoincCode.js";
+import { lookupSnomedCodeTool } from "./tools/lookupSnomedCode.js";
 
 
 import { configResource } from "./resources/config.js";
@@ -15,7 +17,7 @@ import { schemaResource } from "./resources/schema.js";
 
 export function createOMOPServer() {
   const server = new McpServer({
-    name: "OMOP-NLP-Translator",
+    name: "Mercurius MCP: eCQM-OMOP-Translator",
     version: "1.0.0"
   });
 
@@ -27,6 +29,8 @@ export function createOMOPServer() {
   // exploreVsacTool(server);    // ValueSet exploration and search
 
   mapVsacToOmopTool(server);         // Complete VSAC to OMOP pipeline
+  lookupLoincCodeTool(server);        // Direct LOINC code lookup
+  lookupSnomedCodeTool(server);       // Direct SNOMED code lookup
 
   mapToOmopTool(server);
   generateSqlTool(server);
