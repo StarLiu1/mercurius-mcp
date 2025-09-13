@@ -87,6 +87,56 @@ export function validateExtractedOids(oids) {
 }
 
 /**
+ * Extract individual code definitions from CQL query
+ * Pattern: code "Name": 'code-value' from "System"
+ * @param {string} cqlQuery - The CQL query string
+ * @returns {Promise<Object>} Object with individual codes array
+ */
+export async function extractIndividualCodesFromCQL(cqlQuery) {
+  try {
+    console.error("Extracting individual codes from CQL...");
+    
+    // Input validation
+    if (!cqlQuery || typeof cqlQuery !== 'string') {
+      console.error("Invalid CQL query input:", typeof cqlQuery);
+      return { codes: [] };
+    }
+    
+    const codes = [];
+    
+    // Pattern to match individual code definitions
+    // Example: code "Diastolic blood pressure": '8462-4' from "LOINC"
+    const codePattern = /code\s+"([^"]+)":\s+'([^']+)'\s+from\s+"([^"]+)"/gi;
+    let match;
+    
+    while ((match = codePattern.exec(cqlQuery)) !== null) {
+      const name = match[1];
+      const code = match[2];
+      const system = match[3];
+      
+      if (code && name && system) {
+        codes.push({
+          name: name.trim(),
+          code: code.trim(),
+          system: system.trim()
+        });
+        console.error(`Found individual code: "${name}" -> ${code} (${system})`);
+      }
+    }
+    
+    console.error(`Total individual codes extracted: ${codes.length}`);
+    
+    return {
+      codes: codes
+    };
+    
+  } catch (error) {
+    console.error("Error extracting individual codes:", error);
+    return { codes: [] };
+  }
+}
+
+/**
  * Extract and validate ValueSet OIDs with detailed reporting
  * @param {string} cqlQuery - The CQL query string
  * @returns {Promise<Object>} Extraction results with validation

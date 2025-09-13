@@ -11,7 +11,7 @@ process.on('uncaughtException', err => {
 });
 
 import { z } from "zod";
-import { extractValueSetIdentifiersFromCQL, validateExtractedOids } from "./parseNlToCql/extractors.js";
+import { extractValueSetIdentifiersFromCQL, validateExtractedOids, extractIndividualCodesFromCQL } from "./parseNlToCql/extractors.js";
 import vsacService from "../../services/vsacService.js";
 import e from "express";
 
@@ -211,22 +211,28 @@ export function mapVsacToOmopTool(server) {
         console.error("Starting VSAC to OMOP mapping pipeline with environment variable defaults...");
         console.error(`Using VSAC username: ${vsacUsername}`);
         console.error(`Using database: ${databaseEndpoint}/${databaseName}`);
-        // Step 1: Extract ValueSet OIDs from CQL
-        console.error("Step 1: Extracting ValueSet OIDs from CQL...");
+        // Step 1: Extract ValueSet OIDs and individual codes from CQL
+        console.error("Step 1: Extracting ValueSet OIDs and individual codes from CQL...");
         const extractionResult = await extractValueSetIdentifiersFromCQL(cqlQuery);
         const extractedOids = extractionResult.oids;
         const valuesets = extractionResult.valuesets;
         
-        if (extractedOids.length === 0) {
+        // Also extract individual codes
+        const codeExtractionResult = await extractIndividualCodesFromCQL(cqlQuery);
+        const individualCodes = codeExtractionResult.codes || [];
+        console.error(`Found ${individualCodes.length} individual codes`);
+        
+        if (extractedOids.length === 0 && individualCodes.length === 0) {
           return {
             content: [{
               type: "text",
               text: JSON.stringify({
                 success: false,
-                message: "No ValueSet OIDs found in CQL query",
+                message: "No ValueSet OIDs or individual codes found in CQL query",
                 cqlQuery,
                 extractedOids: [],
-                valuesets: []
+                valuesets: [],
+                individualCodes: []
               }, null, 2)
             }]
           };
@@ -247,7 +253,32 @@ export function mapVsacToOmopTool(server) {
             const { conceptsForMapping, valueSetSummary } =
                 prepareConceptsAndSummary(vsacResults, valuesets);
         
-        console.error(`Prepared ${conceptsForMapping.length} concepts for OMOP mapping`);
+        // Add individual codes to conceptsForMapping
+        const individualCodeMappings = [];
+        for (const code of individualCodes) {
+          const cleanCode = code.code.replace('-', '_').replace('.', '_');
+          const placeholderName = `PLACEHOLDER_${code.system.toUpperCase()}_${cleanCode}`;
+          
+          conceptsForMapping.push({
+            concept_set_id: placeholderName,
+            concept_set_name: code.name,
+            concept_code: code.code,
+            vocabulary_id: mapVsacToOmopVocabulary(code.system),
+            original_vocabulary: code.system,
+            display_name: code.name,
+            code_system: code.system,
+            is_individual_code: true
+          });
+          
+          individualCodeMappings.push({
+            code: code.code,
+            name: code.name,
+            system: code.system,
+            placeholder: placeholderName
+          });
+        }
+        
+        console.error(`Prepared ${conceptsForMapping.length} concepts for OMOP mapping (including ${individualCodes.length} individual codes)`);
         
         // Step 4: Map to OMOP concepts using real database
         console.error("Step 4: Mapping to OMOP concepts using Tufts database...");
@@ -294,7 +325,9 @@ export function mapVsacToOmopTool(server) {
                 step1_extraction: {
                   extractedOids,
                   valuesets,
-                  totalValueSets: extractedOids.length
+                  codes: individualCodes,  // Changed from individualCodes to codes to match Python client expectation
+                  totalValueSets: extractedOids.length,
+                  totalIndividualCodes: individualCodes.length
                 },
                 step2_vsac_fetch: {
                   valueSetSummary,
@@ -305,7 +338,8 @@ export function mapVsacToOmopTool(server) {
                   verbatim: omopMappingResults.verbatim || [],
                   standard: omopMappingResults.standard || [],
                   mapped: omopMappingResults.mapped || []
-                }
+                },
+                step5_individual_code_mappings: individualCodeMappings
               },
               metadata: {
                 processingTime: new Date().toISOString(),
