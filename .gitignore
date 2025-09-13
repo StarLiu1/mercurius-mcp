@@ -5,3 +5,8 @@ src/package-lock.json
 /old scripts
 src/notes.txt
 run-mcp.sh
+src/fetch_real_vsac_complete.js
+src/fetch_real_vsac.js
+src/fetch_vsac_only.js
+src/mcp/transports/http_jsonrpc.patch
+node_modules/*

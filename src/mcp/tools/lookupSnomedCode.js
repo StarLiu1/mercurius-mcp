@@ -114,7 +114,7 @@ async function mapSnomedToOmop(code) {
       JOIN dbo.concept_relationship cr ON c1.concept_id = cr.concept_id_1
       JOIN dbo.concept c2 ON cr.concept_id_2 = c2.concept_id
       WHERE c1.vocabulary_id = 'SNOMED'
-        AND c1.concept_code = ?
+        AND c1.concept_code = $1
         AND cr.relationship_id = 'Maps to'
         AND c2.standard_concept = 'S'
         AND cr.invalid_reason IS NULL
